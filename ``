@@ -1,0 +1,74 @@
+from src.database import Database
+from src.models import ProductVariantInput
+import json
+
+class Ingestor:
+    def __int__(self, db: Database):
+        self.db = db
+
+    def ingest(self, data: ProductVariantInput):
+        # 1. Upsert Brand
+        brand_query = """
+            INSERT INTO brands (name)
+            VALUES (%s)
+            ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id;
+        """
+        brand_id = self.db.execute(brand_query, (data.brand_name,), fetch=True)[0]['id']
+
+        # 2. Upsert Family
+        family_query = """
+            INSERT INTO product_families (brand_id, name, slug)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id;
+        """
+        family_id = self.db.execute(family_query, (brand_id, data.family_name, data.family_slug), fetch=True)[0]['id']
+
+        # 3. Upsert Variant
+        variant_query = """
+            INSERT INTO product_variants (family_id, name, attributes)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (id) DO NOTHING; -- Note: We'd need a unique constraint on (family_id, attributes) for true upsert
+        """
+        # For simplicity in this MVP, we'll find or create based on name
+        check_variant_query = "SELECT id FROM product_variants WHERE family_id = %s AND name = %s;"
+        variant_res = self.db.execute(check_variant_query, (family_id, data.variant_name), fetch=True)
+
+        if variant_res:
+            variant_id = variant_res[0]['id']
+        else:
+            variant_query = """
+                INSERT INTO product_variants (family_id, name, attributes)
+                VALUES (%s, %s, %s)
+                RETURNING id;
+            """
+            variant_id = self.db.execute(variant_query, (family_id, data.variant_name, json.dumps(data.attributes)), fetch=True)[0]['id']
+
+        # 4. Upsert Source
+        source_query = """
+            INSERT INTO sources (name, base_url)
+            VALUES (%s, %s)
+            ON CONFLICT (name) DO UPDATE SET base_url = EXCLUDED.base_url
+            RETURNING id;
+        """
+        source_id = self.db.execute(source_query, (data.source_name, data.source_url), fetch=True)[0]['id']
+
+        # 5. Log Price
+        price_log_query = """
+            INSERT INTO price_logs (variant_id, source_id, price, currency, url, metadata)
+            VALUES (%s, %s, %s, %s, %s, %s);
+        """
+        self.db.execute(price_log_query, (
+            variant_id,
+            source_id,
+            data.price,
+            data.currency,
+            data.url,
+            json.dumps(data.metadata)
+        ))
+
+        print(f"Successfully ingested price for {data.variant_name} from {data.source_name}")
+
+    def __init__(self, db: Database):
+        self.db = db

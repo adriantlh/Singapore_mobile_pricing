@@ -1,0 +1,81 @@
+import json
+from src.database import Database
+from src.models import ProductVariantInput
+
+class Ingestor:
+    def __init__(self, db: Database):
+        self.db = db
+
+    def ingest(self, data: ProductVariantInput):
+        # 1. Upsert Brand
+        brand_query = """
+            INSERT INTO brands (name)
+            VALUES (%s)
+            ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id;
+        """
+        brand_res = self.db.execute(brand_query, (data.brand_name,), fetch=True)
+        if not brand_res:
+            raise Exception("Failed to upsert brand")
+        brand_id = brand_res[0]['id']
+
+        # 2. Upsert Family
+        family_query = """
+            INSERT INTO product_families (brand_id, name, slug)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+            RETURNING id;
+        """
+        family_res = self.db.execute(family_query, (brand_id, data.family_name, data.family_slug), fetch=True)
+        if not family_res:
+            raise Exception("Failed to upsert family")
+        family_id = family_res[0]['id']
+
+        # 3. Upsert Variant
+        # We check if a variant with this name exists for this family
+        check_variant_query = "SELECT id FROM product_variants WHERE family_id = %s AND name = %s;"
+        variant_res = self.db.execute(check_variant_query, (family_id, data.variant_name), fetch=True)
+
+        if variant_res:
+            variant_id = variant_res[0]['id']
+            # Update attributes in case they changed
+            update_variant_query = "UPDATE product_variants SET attributes = %s WHERE id = %s;"
+            self.db.execute(update_variant_query, (json.dumps(data.attributes), variant_id))
+        else:
+            variant_query = """
+                INSERT INTO product_variants (family_id, name, attributes)
+                VALUES (%s, %s, %s)
+                RETURNING id;
+            """
+            variant_res = self.db.execute(variant_query, (family_id, data.variant_name, json.dumps(data.attributes)), fetch=True)
+            if not variant_res:
+                raise Exception("Failed to upsert variant")
+            variant_id = variant_res[0]['id']
+
+        # 4. Upsert Source
+        source_query = """
+            INSERT INTO sources (name, base_url)
+            VALUES (%s, %s)
+            ON CONFLICT (name) DO UPDATE SET base_url = EXCLUDED.base_url
+            RETURNING id;
+        """
+        source_res = self.db.execute(source_query, (data.source_name, data.source_url), fetch=True)
+        if not source_res:
+            raise Exception("Failed to upsert source")
+        source_id = source_res[0]['id']
+
+        # 5. Log Price
+        price_log_query = """
+            INSERT INTO price_logs (variant_id, source_id, price, currency, url, metadata)
+            VALUES (%s, %s, %s, %s, %s, %s);
+        """
+        self.db.execute(price_log_query, (
+            variant_id,
+            source_id,
+            data.price,
+            data.currency,
+            data.url,
+            json.dumps(data.metadata)
+        ))
+
+        print(f"Successfully ingested price for {data.variant_name} from {data.source_name}")
