@@ -3,3 +3,4 @@ python-dotenv
 httpx
 beautifulsoup4
 pydantic
+rapidfuzz

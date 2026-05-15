@@ -16,13 +16,15 @@ CREATE TABLE IF NOT EXISTS product_families (
     brand_id UUID NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL DEFAULT 'phone', -- 'phone', 'watch', 'tablet', 'accessory'
+    released_at DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 3. Product Variants Table (e.g., "S25 256GB Black")
 CREATE TABLE IF NOT EXISTS product_variants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    family_id UUID NOT NULL REFERENCES product_abilities(id) ON DELETE CASCADE,
+    family_id UUID NOT NULL REFERENCES product_families(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     -- attributes stores: {"storage": "256GB", "color": "Black", "condition": "new"}
     attributes JSONB NOT NULL DEFAULT '{}',
@@ -40,7 +42,7 @@ CREATE TABLE IF NOT EXISTS sources (
 );
 
 -- 5. Price Logs Table (The time-series data)
-CREATE TABLE IF NOT IF EXISTS price_logs (
+CREATE TABLE IF NOT EXISTS price_logs (
     id BIGSERIAL PRIMARY KEY,
     variant_id UUID NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
     source_id UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,

@@ -7,10 +7,12 @@ The system automatically scrapes pricing information from multiple sources, norm
 
 ## Architectural Principles
 
-### 1. Adapter-Based Scrapes
+### 1. Catalog-Driven Scrapes
+- **Master Catalog**: The system is seeded with a canonical list of Brands and Product Families (10,000+ devices) from external sources.
+- **Normalizer Engine**: Every scraped title passes through a `Normalizer` that uses fuzzy matching (`RapidFuzz`) to map it to a canonical model.
+- **Auto-Discovery**: If no high-confidence match is found, the system automatically creates a new Brand/Family to ensure no data is lost.
 - **Site-Specific Adapters**: Every target website has its own adapter located in `src/adapters/`.
-- **Inheritance**: All adapters must inherit from `BaseAdapter` to ensure a consistent interface (`scrape`, `parse`, `validate`, `run`).
-- **Isolation**: Parsing logic for one site must never depend on the structure of another.
+- **Inheritance**: All adapters must inherit from `BaseAdapter`.
 
 ### 2. Data Flow
 - **Scrape**: Fetch raw HTML/JS content (using `httpx` for static or `Playwright` for dynamic sites).

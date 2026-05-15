@@ -1,32 +1,43 @@
 import json
 from src.database import Database
 from src.models import ProductVariantInput
+from src.normalizer import Normalizer
 
 class Ingestor:
     def __init__(self, db: Database):
         self.db = db
+        self.normalizer = Normalizer(db)
 
-    def ingest(self, data: ProductVariantInput):
-        # 1. Upsert Brand
+    def ingest(self, data: ProductVariantInput, category: str = "phone", released_at: str = None):
+        # 1. Normalize Brand Name
+        brand_name = self.normalizer.normalize_brand(data.brand_name)
+        if brand_name == "Unknown":
+            print(f"Skipping non-target brand: {data.brand_name}")
+            return
+        
+        # 2. Upsert Brand
         brand_query = """
             INSERT INTO brands (name)
             VALUES (%s)
             ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
             RETURNING id;
         """
-        brand_res = self.db.execute(brand_query, (data.brand_name,), fetch=True)
+        brand_res = self.db.execute(brand_query, (brand_name,), fetch=True)
         if not brand_res:
             raise Exception("Failed to upsert brand")
         brand_id = brand_res[0]['id']
 
-        # 2. Upsert Family
+        # 3. Upsert Family
         family_query = """
-            INSERT INTO product_families (brand_id, name, slug)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+            INSERT INTO product_families (brand_id, name, slug, category, released_at)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (slug) DO UPDATE SET 
+                name = EXCLUDED.name,
+                category = EXCLUDED.category,
+                released_at = COALESCE(EXCLUDED.released_at, product_families.released_at)
             RETURNING id;
         """
-        family_res = self.db.execute(family_query, (brand_id, data.family_name, data.family_slug), fetch=True)
+        family_res = self.db.execute(family_query, (brand_id, data.family_name, data.family_slug, category, released_at), fetch=True)
         if not family_res:
             raise Exception("Failed to upsert family")
         family_id = family_res[0]['id']

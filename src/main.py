@@ -5,7 +5,8 @@ from src.models import ProductVariantInput
 
 # Mocking the environment for testing
 # In a real scenario, you would set this in a .env file
-os.environ["DATABASE_URL"] = "postgresql://postgres:postgres@localhost:5432/postgres"
+if "DATABASE_URL" not in os.environ:
+    os.environ["DATABASE_URL"] = "postgresql://user:password@localhost:5432/mobile_pricing"
 
 def test_ingestion():
     db = Database()

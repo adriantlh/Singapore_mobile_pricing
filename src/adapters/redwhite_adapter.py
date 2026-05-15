@@ -33,7 +33,11 @@ class RedWhiteMobileAdapter(BaseAdapter):
             try:
                 # 1. Extract Brand
                 brand_elem = container.find(['span', 'p'], class_='category')
-                brand = brand_elem.get_text(strip=True) if brand_elem else "Unknown"
+                brand = "Unknown"
+                if brand_elem:
+                    brand = brand_elem.get_text(strip=True)
+                    # Strip prefixes like "New Oppo" -> "Oppo"
+                    brand = re.sub(r'^(new|used|refurbished)\s+', '', brand, flags=re.IGNORECASE).strip()
 
                 # 2. Extract Link and Model
                 title_container = container.find(['p', 'div'], class_='name')

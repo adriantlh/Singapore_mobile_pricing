@@ -49,7 +49,7 @@ def get_products():
     """
     try:
         results = db.execute(query, fetch=True)
-        return results
+        return [dict(row) for row in results]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -66,7 +66,7 @@ def get_product_history(variant_id: str):
     """
     try:
         results = db.execute(query, (variant_id,), fetch=True)
-        return results
+        return [dict(row) for row in results]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -78,7 +78,69 @@ def get_sources():
     query = "SELECT id, name, base_url, health_status, last_error FROM sources;"
     try:
         results = db.execute(query, fetch=True)
-        return results
+        return [dict(row) for row in results]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/families")
+def get_families():
+    """
+    Retrieve a list of product families with their associated variants and prices.
+    """
+    query = """
+    SELECT 
+        pf.id as family_id,
+        pf.name as family_name,
+        pf.category,
+        pf.released_at,
+        b.name as brand_name,
+        pv.id as variant_id, 
+        pv.name as variant_name, 
+        pv.attributes, 
+        pl.price,
+        pl.currency,
+        pl.url,
+        pl.scraped_at,
+        s.name as source_name
+    FROM product_variants pv
+    JOIN product_families pf ON pv.family_id = pf.id
+    JOIN brands b ON pf.brand_id = b.id
+    JOIN (
+        SELECT DISTINCT ON (variant_id) variant_id, price, currency, url, scraped_at, source_id
+        FROM price_logs
+        ORDER BY variant_id, scraped_at DESC
+    ) pl ON pv.id = pl.variant_id
+    JOIN sources s ON pl.source_id = s.id
+    ORDER BY pf.id, pl.price;
+    """
+    try:
+        results = db.execute(query, fetch=True)
+        
+        families = {}
+        for row in results:
+            f_id = row['family_id']
+            if f_id not in families:
+                families[f_id] = {
+                    "id": str(f_id),
+                    "name": row['family_name'],
+                    "brand_name": row['brand_name'],
+                    "category": row['category'],
+                    "released_at": row['released_at'].isoformat() if hasattr(row['released_at'], 'isoformat') else row['released_at'],
+                    "variants": []
+                }
+            
+            families[f_id]["variants"].append({
+                "id": str(row['variant_id']),
+                "name": row['variant_name'],
+                "attributes": row['attributes'],
+                "price": float(row['price']),
+                "currency": row['currency'],
+                "url": row['url'],
+                "scraped_at": row['scraped_at'].isoformat() if hasattr(row['scraped_at'], 'isoformat') else row['scraped_at'],
+                "source_name": row['source_name']
+            })
+            
+        return list(families.values())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

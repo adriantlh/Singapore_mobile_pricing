@@ -16,15 +16,13 @@ This document tracks the active implementation progress of the project.
 
 ## Phase 2: The Adapter Engine
 - [x] **Task 2.1: Base Adapter Class**
-    - [x] Implementing: Define the abstract interface for all scrapers.
-- [x] **Task 2.2: Adapter #1 (Static Site)**
-    - [x] Completed: Implement scraper for a simple, non-JS site.
-- [ ] **Task 2.3: Adapter #2 (Dynamic Site)**
-    - [ ] Implement Playwright-based scraper with `stealth` mode.
-- [ ] **Task 2.4: Adapter #3 (Refurbished/Used Store)**
-    - [ ] Implement scraper for second-hand specialized stores.
-- [ ] **Task 2.5: The Standardizer**
-    - [ ] Implement logic to normalize all incoming data to the standard JSON format.
+    - [x] Completed: Define the abstract interface for all scrapers.
+- [x] **Task 2.2: Retail Adapters (Static & JSON)**
+    - [x] Completed: Implement scrapers for RedWhite Mobile, Mister Mobile, WhyMobile, and MobileStop.
+- [x] **Task 2.3: Used/Refurbished Specialization**
+    - [x] Completed: Built deep-scraping logic for specialized used device retailers.
+- [x] **Task 2.4: The Intelligence Engine (Standardizer)**
+    - [x] Completed: Implemented the `Normalizer` to handle fuzzy matching, precision generational naming, and cross-source data overlap.
 
 ## Phase 3: Orchestration & Automation
 - [ ] **Task 3.1: Infrastructure Setup**
