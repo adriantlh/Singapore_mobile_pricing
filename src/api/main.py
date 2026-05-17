@@ -93,6 +93,7 @@ def get_families():
         pf.name as family_name,
         pf.category,
         pf.released_at,
+        pf.image_url,
         b.name as brand_name,
         pv.id as variant_id, 
         pv.name as variant_name, 
@@ -126,6 +127,7 @@ def get_families():
                     "brand_name": row['brand_name'],
                     "category": row['category'],
                     "released_at": row['released_at'].isoformat() if hasattr(row['released_at'], 'isoformat') else row['released_at'],
+                    "image_url": row['image_url'],
                     "variants": []
                 }
             
@@ -141,6 +143,44 @@ def get_families():
             })
             
         return list(families.values())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/alerts/top")
+def get_top_deals():
+    """
+    Returns the top 10 price drops from the last 48 hours.
+    """
+    try:
+        query = """
+        SELECT 
+            pv.id as variant_id,
+            pv.name as variant_name,
+            pf.name as family_name,
+            pf.category,
+            pf.image_url,
+            b.name as brand_name,
+            ta.price_before as old_price,
+            ta.price_after as new_price,
+            ta.percentage_drop as drop_pct,
+            pl.url,
+            s.name as source_name
+        FROM triggered_alerts ta
+        JOIN product_variants pv ON ta.variant_id = pv.id
+        JOIN product_families pf ON pv.family_id = pf.id
+        JOIN brands b ON pf.brand_id = b.id
+        JOIN (
+            SELECT DISTINCT ON (variant_id) variant_id, url, source_id
+            FROM price_logs
+            ORDER BY variant_id, scraped_at DESC
+        ) pl ON pv.id = pl.variant_id
+        JOIN sources s ON pl.source_id = s.id
+        WHERE ta.triggered_at > NOW() - INTERVAL '48 hours'
+        ORDER BY ta.percentage_drop DESC
+        LIMIT 10;
+        """
+        results = db.execute(query, fetch=True)
+        return [dict(row) for row in results]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

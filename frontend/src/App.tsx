@@ -5,11 +5,13 @@ import {
 } from 'recharts';
 import { 
   Smartphone, TrendingUp, AlertCircle, RefreshCw, Search, Filter, 
-  ChevronRight, ArrowDownRight, ShieldCheck, Zap, Package
+  ArrowDownRight, ShieldCheck, Zap, Package,
+  ShoppingBag, Flame, ExternalLink, ArrowRight, Info,
+  Sun, Moon
 } from 'lucide-react';
 import './App.css';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
 interface Variant {
   id: string;
@@ -18,6 +20,7 @@ interface Variant {
     storage?: string;
     condition?: string;
     color?: string;
+    promo?: string;
     [key: string]: any;
   };
   price: number;
@@ -27,12 +30,26 @@ interface Variant {
   source_name: string;
 }
 
+interface TopDeal {
+  variant_id: string;
+  variant_name: string;
+  family_name: string;
+  brand_name: string;
+  image_url?: string;
+  old_price: number;
+  new_price: number;
+  drop_pct: number;
+  url: string;
+  source_name: string;
+}
+
 interface Family {
   id: string;
   name: string;
   brand_name: string;
   category: string;
   released_at: string | null;
+  image_url?: string;
   variants: Variant[];
 }
 
@@ -44,6 +61,7 @@ interface PriceHistory {
 
 const App: React.FC = () => {
   const [families, setFamilies] = useState<Family[]>([]);
+  const [topDeals, setTopDeals] = useState<TopDeal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedFamily, setSelectedFamily] = useState<Family | null>(null);
@@ -54,10 +72,24 @@ const App: React.FC = () => {
   const [activeBrand, setActiveBrand] = useState('All');
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortBy, setSortBy] = useState<'newest' | 'price_low' | 'price_high'>('newest');
+  
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'dark';
+  });
 
   useEffect(() => {
     fetchFamilies();
+    fetchTopDeals();
   }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
 
   const fetchFamilies = async () => {
     try {
@@ -70,6 +102,15 @@ const App: React.FC = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTopDeals = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/alerts/top`);
+      setTopDeals(response.data);
+    } catch (err) {
+      console.error('Failed to fetch top deals', err);
     }
   };
 
@@ -92,22 +133,15 @@ const App: React.FC = () => {
     return ['All', ...Array.from(b).sort()];
   }, [families]);
 
-  const categories = useMemo(() => {
-    const c = new Set<string>();
-    families.forEach(f => c.add(f.category));
-    return ['All', ...Array.from(c).sort()];
-  }, [families]);
-
   const filteredFamilies = useMemo(() => {
     let result = families.filter(f => {
       const matchesSearch = f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            f.brand_name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesBrand = activeBrand === 'All' || f.brand_name === activeBrand;
-      const matchesCategory = activeCategory === 'All' || f.category === activeCategory;
+      const matchesCategory = activeCategory === 'All' || f.category.toLowerCase() === activeCategory.toLowerCase();
       return matchesSearch && matchesBrand && matchesCategory;
     });
 
-    // Apply Sorting
     return result.sort((a, b) => {
       if (sortBy === 'newest') {
         const dateA = a.released_at ? new Date(a.released_at).getTime() : 0;
@@ -159,10 +193,79 @@ const App: React.FC = () => {
     });
   };
 
+  const ProductImage = ({ brand, image_url, className = "" }: { brand: string, image_url?: string, name?: string, className?: string }) => {
+    const getPlaceholder = () => {
+      const b = brand.toLowerCase();
+      if (b.includes('apple')) return <div className="text-theme-secondary font-bold"></div>;
+      if (b.includes('samsung')) return <div className="text-blue-500 font-black tracking-tighter text-[10px]">SAMSUNG</div>;
+      if (b.includes('google')) return <div className="text-red-500 font-black text-xl">G</div>;
+      return <Smartphone className="text-theme-secondary h-8 w-8 opacity-40" />;
+    };
+
+    return (
+      <div className={`img-placeholder rounded-2xl overflow-hidden ${className}`}>
+        {image_url ? (
+          <img 
+            src={image_url} 
+            alt={brand} 
+            className="w-full h-full object-contain p-2 hover:scale-110 transition-transform duration-500"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-theme-secondary font-bold opacity-20 text-[8px]">NO IMG</div>';
+            }}
+          />
+        ) : (
+          getPlaceholder()
+        )}
+      </div>
+    );
+  };
+
+  const TopDeals = () => {
+    if (topDeals.length === 0) return null;
+    return (
+      <div className="mb-12 animate-fade-in">
+        <div className="flex items-center space-x-2 mb-6">
+          <div className="bg-red-500/20 p-1.5 rounded-lg">
+            <Flame className="h-5 w-5 text-red-500" />
+          </div>
+          <h2 className="text-xl font-black text-theme-primary uppercase tracking-tight">Today's Biggest Drops</h2>
+        </div>
+        <div className="flex space-x-4 overflow-x-auto pb-4 custom-scrollbar-none">
+          {topDeals.map((deal, idx) => (
+            <a 
+              key={idx}
+              href={deal.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-none w-[280px] glass rounded-3xl p-5 card-hover group/deal border-theme-border"
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div className="deal-badge px-2 py-1 rounded-lg text-[10px] font-black text-white">-{Math.round(deal.drop_pct)}% OFF</div>
+                <div className="text-[10px] font-bold text-theme-secondary uppercase">{deal.source_name}</div>
+              </div>
+              <div className="flex space-x-4">
+                <ProductImage brand={deal.brand_name} image_url={deal.image_url} className="h-16 w-16 text-lg" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-bold text-theme-secondary truncate mb-1">{deal.brand_name}</div>
+                  <div className="text-sm font-black text-theme-primary truncate leading-tight mb-2 group-hover/deal:text-theme-accent transition-colors">{deal.variant_name}</div>
+                  <div className="flex items-baseline space-x-2">
+                    <div className="text-lg font-black text-theme-primary">${deal.new_price.toLocaleString()}</div>
+                    <div className="text-xs text-theme-secondary line-through">${deal.old_price.toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const VariantBox = ({ variants, type }: { variants?: Variant[], type: 'new' | 'used' }) => {
     const [localActiveIdx, setLocalActiveIdx] = useState(0);
     if (!variants || variants.length === 0) {
-      return <div className="text-center py-2 text-[10px] text-slate-700 font-bold italic uppercase">{type === 'new' ? 'OOS' : 'None'}</div>;
+      return <div className="text-center py-4 text-[10px] text-theme-secondary font-bold italic uppercase tracking-widest bg-theme-base/30 rounded-xl border border-theme-border">{type === 'new' ? 'Out of Stock' : 'None Available'}</div>;
     }
 
     const sorted = [...variants].sort((a, b) => a.price - b.price);
@@ -171,241 +274,248 @@ const App: React.FC = () => {
 
     return (
       <div 
-        className={`p-3 rounded-xl border transition-all relative group/box ${
+        className={`p-4 rounded-2xl border transition-all relative group/box overflow-hidden ${
           selectedVariantId === active.id 
-          ? (type === 'new' ? 'bg-indigo-600/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.1)]' : 'bg-emerald-600/20 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.1)]')
-          : 'bg-slate-900/50 border-white/5 hover:border-white/10'
+          ? (type === 'new' ? 'bg-theme-accent/10 border-theme-accent/50 shadow-xl' : 'bg-success/10 border-success/50 shadow-xl')
+          : 'bg-theme-base/40 border-theme-border hover:border-theme-accent/30'
         }`}
         onClick={() => {
           setSelectedVariantId(active.id);
           fetchHistory(active.id);
         }}
       >
-        <div className="flex flex-col space-y-2">
-          {/* Main Price Clickthrough */}
+        <div className="flex flex-col space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <div className="flex items-baseline space-x-2">
+                <div className="text-xl font-black text-theme-primary tracking-tighter">${active.price.toLocaleString()}</div>
+                {savings && active.price < savings.price && (
+                  <div className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full font-black flex items-center">
+                    <ArrowDownRight className="h-3 w-3 mr-0.5" />
+                    SAVE {Math.round((1 - active.price / savings.price) * 100)}%
+                  </div>
+                )}
+              </div>
+              <div className="text-[9px] font-bold text-theme-secondary uppercase tracking-widest mt-1">Best from {active.source_name}</div>
+            </div>
+            {active.attributes.promo && (
+              <div className="bg-theme-accent/20 text-theme-accent p-1.5 rounded-lg group-hover/box:bg-theme-accent group-hover/box:text-white transition-all cursor-help" title={active.attributes.promo}>
+                <Zap className="h-4 w-4" />
+              </div>
+            )}
+          </div>
+
           <a 
             href={active.url} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="block hover:no-underline group/link"
+            className={`cta-button flex items-center justify-center space-x-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest text-white no-underline shadow-lg shadow-black/20`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <div className="text-sm font-black text-white group-hover/link:text-indigo-400 transition-colors">${active.price.toLocaleString()}</div>
-                {savings && active.price < savings.price && (
-                  <div className="text-[10px] text-emerald-400 font-bold flex items-center">
-                    <ArrowDownRight className="h-3 w-3" />
-                    {Math.round((1 - active.price / savings.price) * 100)}%
-                  </div>
-                )}
-              </div>
-              <div className="text-[7px] font-black bg-white/10 px-1.5 py-0.5 rounded text-slate-300 uppercase tracking-tighter group-hover/link:bg-indigo-500/20 group-hover/link:text-indigo-300 transition-all">
-                {active.source_name}
-              </div>
-            </div>
+            <ShoppingBag className="h-3.5 w-3.5" />
+            <span>Buy at {active.source_name.split(' ')[0]}</span>
+            <ExternalLink className="h-3 w-3 opacity-50" />
           </a>
 
-          {/* Other Sources Comparison */}
           {Array.from(new Set(variants.map(v => v.source_name))).length > 1 && (
-            <div className="pt-1 border-t border-white/5 space-y-1">
-              <div className="text-[7px] text-slate-500 font-bold uppercase tracking-widest text-center">Compare Sources</div>
-              {Array.from(new Set(variants.map(v => v.source_name))).filter(s => s !== active.source_name).map(sourceName => {
-                const lowest = variants.filter(v => v.source_name === sourceName).sort((a,b) => a.price - b.price)[0];
-                return (
-                  <a 
-                    key={sourceName} 
-                    href={lowest.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex justify-between items-center text-[9px] hover:bg-white/5 px-1 rounded transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <span className="text-slate-400 truncate max-w-[60px]">{sourceName}</span>
-                    <span className="font-bold text-slate-200">${lowest.price.toLocaleString()}</span>
-                  </a>
-                );
-              })}
+            <div className="pt-3 border-t border-theme-border space-y-2">
+              <div className="text-[8px] text-theme-secondary font-black uppercase tracking-[0.2em] text-center">Market Comparison</div>
+              <div className="grid grid-cols-1 gap-1.5">
+                {Array.from(new Set(variants.map(v => v.source_name))).filter(s => s !== active.source_name).map(sourceName => {
+                  const lowest = variants.filter(v => v.source_name === sourceName).sort((a,b) => a.price - b.price)[0];
+                  return (
+                    <a 
+                      key={sourceName} 
+                      href={lowest.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex justify-between items-center text-[10px] bg-theme-primary/[0.03] hover:bg-theme-primary/[0.08] px-2 py-1.5 rounded-lg transition-colors border border-transparent hover:border-theme-border"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-theme-secondary font-bold truncate max-w-[80px]">{sourceName}</span>
+                      <span className="font-black text-theme-primary">${lowest.price.toLocaleString()}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {variants.length > 1 && (
+            <div className="flex flex-wrap gap-1 justify-center mt-2 pt-2 border-t border-theme-border">
+              {variants.map((v) => (
+                <button
+                  key={v.id}
+                  title={`${v.attributes.color || 'Default'} - $${v.price}`}
+                  className={`w-4 h-4 rounded-full border-2 transition-all transform hover:scale-125 ${
+                    selectedVariantId === v.id ? 'border-theme-primary scale-110 shadow-lg' : 'border-transparent opacity-60'
+                  }`}
+                  style={{ 
+                    backgroundColor: v.attributes.color?.toLowerCase().includes('blue') ? '#3b82f6' :
+                                     v.attributes.color?.toLowerCase().includes('green') ? '#10b981' :
+                                     v.attributes.color?.toLowerCase().includes('red') ? '#ef4444' :
+                                     v.attributes.color?.toLowerCase().includes('gold') ? '#f59e0b' :
+                                     v.attributes.color?.toLowerCase().includes('titanium') ? '#94a3b8' :
+                                     v.attributes.color?.toLowerCase().includes('purple') ? '#8b5cf6' :
+                                     v.attributes.color?.toLowerCase().includes('orange') ? '#f97316' :
+                                     v.attributes.color?.toLowerCase().includes('pink') ? '#ec4899' :
+                                     v.attributes.color?.toLowerCase().includes('silver') ? '#e2e8f0' :
+                                     v.attributes.color?.toLowerCase().includes('black') ? '#000' :
+                                     v.attributes.color?.toLowerCase().includes('white') ? '#fff' : '#6366f1'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newIdx = sorted.findIndex(sv => sv.id === v.id);
+                    setLocalActiveIdx(newIdx);
+                    setSelectedVariantId(v.id);
+                    fetchHistory(v.id);
+                  }}
+                />
+              ))}
             </div>
           )}
         </div>
-        
-        {variants.length > 1 && (
-          <div className="flex flex-wrap gap-1 justify-center mt-2 pt-2 border-t border-white/5">
-            {variants.map((v) => (
-              <button
-                key={v.id}
-                title={`${v.source_name}: ${v.attributes.color || 'Default'}`}
-                className={`w-2.5 h-2.5 rounded-full border border-white/20 transition-transform ${active.id === v.id ? 'scale-125 ring-1 ring-white/50' : 'opacity-40 hover:opacity-100'}`}
-                style={{ 
-                  backgroundColor: v.attributes.color?.toLowerCase().includes('blue') ? '#3b82f6' : 
-                                   v.attributes.color?.toLowerCase().includes('green') ? '#10b981' : 
-                                   v.attributes.color?.toLowerCase().includes('red') ? '#ef4444' :
-                                   v.attributes.color?.toLowerCase().includes('gold') ? '#f59e0b' :
-                                   v.attributes.color?.toLowerCase().includes('titanium') ? '#94a3b8' :
-                                   v.attributes.color?.toLowerCase().includes('purple') ? '#8b5cf6' :
-                                   v.attributes.color?.toLowerCase().includes('orange') ? '#f97316' :
-                                   v.attributes.color?.toLowerCase().includes('pink') ? '#ec4899' :
-                                   v.attributes.color?.toLowerCase().includes('silver') ? '#e2e8f0' :
-                                   v.attributes.color?.toLowerCase().includes('black') ? '#000' :
-                                   v.attributes.color?.toLowerCase().includes('white') ? '#fff' : '#6366f1'
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const newIdx = sorted.findIndex(sv => sv.id === v.id);
-                  setLocalActiveIdx(newIdx);
-                  setSelectedVariantId(v.id);
-                  fetchHistory(v.id);
-                }}
-              />
-            ))}
-          </div>
-        )}
       </div>
     );
   };
 
   return (
     <div className="min-h-screen pb-20">
-      <nav className="glass sticky top-0 z-50 border-b border-white/5 py-4 mb-8">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <header className="sticky top-0 z-50 glass border-b border-theme-border py-4 px-6 mb-8">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <div className="bg-indigo-600 p-2 rounded-xl shadow-lg shadow-indigo-500/20">
-              <Smartphone className="h-6 w-6 text-white" />
+            <div className="bg-theme-accent p-2 rounded-xl shadow-lg">
+              <TrendingUp className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight text-white">SG MOBILE</h1>
-              <p className="text-[10px] uppercase tracking-widest text-indigo-400 font-bold">Price Tracker</p>
+              <h1 className="text-xl font-black text-theme-primary uppercase tracking-tighter leading-none">SG Mobile</h1>
+              <p className="text-[10px] font-bold text-theme-secondary uppercase tracking-widest mt-1">Price Tracker</p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-4 flex-1 max-w-xl md:ml-12">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input 
-                type="text"
-                placeholder="Search models, brands..."
-                className="w-full bg-slate-900/50 border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+          <div className="flex flex-1 max-w-xl relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-theme-secondary" />
+            <input 
+              type="text"
+              placeholder="Search by model or brand..."
+              className="w-full bg-theme-base/50 border border-theme-border rounded-2xl py-2.5 pl-11 pr-4 text-sm text-theme-primary focus:outline-none focus:border-theme-accent focus:ring-1 focus:ring-theme-accent transition-all"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <div className="flex p-1 bg-theme-base/80 rounded-xl border border-theme-border shadow-sm">
+              {['All', 'Phone', 'Watch', 'Tablet', 'Accessory'].map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all ${
+                    activeCategory.toLowerCase() === cat.toLowerCase() ? 'bg-theme-accent text-white shadow-lg' : 'text-theme-secondary hover:text-theme-primary'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
             </div>
+            
             <button 
-              onClick={fetchFamilies}
-              className="p-2 bg-slate-800 rounded-full hover:bg-slate-700 transition-colors"
+              onClick={toggleTheme}
+              className="flex items-center space-x-2 px-3 py-2 bg-theme-accent text-white rounded-xl shadow-lg hover:scale-105 transition-all"
+              title="Toggle Light/Dark Mode"
             >
-              <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin text-indigo-400' : 'text-slate-300'}`} />
+              {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              <span className="text-[10px] font-black uppercase tracking-widest hidden lg:block">Theme</span>
             </button>
           </div>
         </div>
-      </nav>
+      </header>
 
-      <main className="max-w-7xl mx-auto px-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-          <div className="flex items-center space-x-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
-            <Filter className="h-4 w-4 text-slate-500 mr-2 flex-shrink-0" />
-            {brands.map(brand => (
-              <button
-                key={brand}
-                onClick={() => setActiveBrand(brand)}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-                  activeBrand === brand 
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' 
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {brand}
-              </button>
-            ))}
+      <main className="max-w-7xl mx-auto px-6">
+        <TopDeals />
+
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center space-x-6 overflow-x-auto custom-scrollbar-none pb-2 md:pb-0">
+            <div className="flex items-center space-x-2">
+              <Filter className="h-4 w-4 text-theme-accent mr-2" />
+              <div className="flex space-x-2">
+                {brands.map(brand => (
+                  <button
+                    key={brand}
+                    onClick={() => setActiveBrand(brand)}
+                    className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${
+                      activeBrand === brand 
+                      ? 'bg-theme-primary text-theme-base border-theme-primary shadow-xl' 
+                      : 'bg-transparent text-theme-secondary border-theme-border hover:border-theme-accent/30'
+                    }`}
+                  >
+                    {brand}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <select 
-              value={activeCategory}
-              onChange={(e) => setActiveCategory(e.target.value)}
-              className="bg-slate-800 text-slate-300 text-xs font-bold px-4 py-2 rounded-xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-            >
-              <option value="All">All Categories</option>
-              {categories.filter(c => c !== 'All').map(c => (
-                <option key={c} value={c}>{c.toUpperCase()}</option>
-              ))}
-            </select>
-
+          <div className="flex items-center space-x-2 bg-theme-base/40 p-1 rounded-xl border border-theme-border flex-shrink-0">
             <select 
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-slate-800 text-slate-300 text-xs font-bold px-4 py-2 rounded-xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              className="bg-transparent text-theme-primary text-[10px] font-black uppercase px-2 py-1 outline-none cursor-pointer"
             >
               <option value="newest">Newest First</option>
-              <option value="price_low">Price: Low to High</option>
-              <option value="price_high">Price: High to Low</option>
+              <option value="price_low">Cheapest First</option>
+              <option value="price_high">Premium First</option>
             </select>
           </div>
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {[1,2,3,4,5,6,7,8].map(i => (
-              <div key={i} className="h-64 bg-slate-800/50 rounded-3xl animate-pulse"></div>
-            ))}
+          <div className="flex flex-col items-center justify-center py-20">
+            <RefreshCw className="h-10 w-10 text-theme-accent animate-spin mb-4" />
+            <p className="text-theme-secondary font-bold uppercase tracking-widest animate-pulse">Updating Market Data...</p>
           </div>
         ) : error ? (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-6 py-8 rounded-3xl text-center">
-            <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <h3 className="text-lg font-bold">Connection Error</h3>
-            <p className="text-sm opacity-80">{error}</p>
+          <div className="glass rounded-3xl p-12 text-center border-red-500/20">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-black text-theme-primary uppercase mb-2">Connection Error</h3>
+            <p className="text-theme-secondary text-sm">{error}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredFamilies.map((family) => (
               <div 
                 key={family.id}
+                className="glass rounded-[2rem] p-6 card-hover cursor-pointer group flex flex-col h-full border border-theme-border"
                 onClick={() => {
                   setSelectedFamily(family);
-                  if (family.variants.length > 0) {
-                    const first = family.variants[0];
-                    setSelectedVariantId(first.id);
-                    fetchHistory(first.id);
-                  }
+                  setSelectedVariantId(family.variants[0]?.id || null);
+                  if (family.variants[0]?.id) fetchHistory(family.variants[0].id);
                 }}
-                className="glass card-glow rounded-3xl p-6 cursor-pointer group transition-all"
               >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex flex-col space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded-md w-fit">
-                      {family.brand_name}
-                    </span>
-                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
-                      {family.category} {family.released_at ? `• ${new Date(family.released_at).getFullYear()}` : ''}
-                    </span>
+                <div className="flex justify-between items-start mb-6">
+                  <ProductImage brand={family.brand_name} image_url={family.image_url} className="h-14 w-14 text-sm" />
+                  <div className="bg-theme-accent/10 text-theme-accent px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter">
+                    {family.category}
                   </div>
-                  {family.variants.some(v => v.attributes.condition === 'used') && (
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md">
-                      Used Stock
-                    </span>
-                  )}
                 </div>
                 
-                <h3 className="text-xl font-bold text-white mb-1 group-hover:text-indigo-400 transition-colors">
-                  {family.name}
-                </h3>
-                
-                <div className="mt-8 flex items-baseline space-x-1">
-                  <span className="text-xs text-slate-500 font-bold">FROM</span>
-                  <span className="text-2xl font-black text-white">
-                    {getPriceRange(family)}
-                  </span>
-                </div>
-                
-                <div className="mt-6 flex items-center justify-between">
-                  <div className="flex -space-x-2">
-                    {Array.from(new Set(family.variants.map(v => v.attributes.storage))).filter(Boolean).sort().map((s, i) => (
-                      <div key={i} className="h-6 w-auto px-2 rounded-md border border-white/5 bg-slate-800 flex items-center justify-center text-[8px] font-bold text-slate-400">
-                        {s}
-                      </div>
-                    ))}
+                <div className="flex-1">
+                  <div className="text-[10px] font-bold text-theme-secondary uppercase tracking-widest mb-1">{family.brand_name}</div>
+                  <h3 className="text-lg font-black text-theme-primary mb-2 leading-tight group-hover:text-theme-accent transition-colors">
+                    {family.name}
+                  </h3>
+                  <div className="flex items-center space-x-2 text-theme-secondary mb-4">
+                    <TrendingUp className="h-3.5 w-3.5 text-success" />
+                    <span className="text-xs font-bold">{getPriceRange(family)}</span>
                   </div>
-                  <ChevronRight className="h-5 w-5 text-slate-600 group-hover:text-white transition-all transform group-hover:translate-x-1" />
+                </div>
+
+                <div className="pt-4 border-t border-theme-border flex items-center justify-between">
+                  <div className="text-[9px] text-theme-secondary font-bold uppercase">{family.variants.length} Variants</div>
+                  <div className="flex items-center space-x-1 text-theme-accent font-black text-[10px] uppercase group-hover:translate-x-1 transition-transform">
+                    <span>Explore</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </div>
                 </div>
               </div>
             ))}
@@ -414,145 +524,134 @@ const App: React.FC = () => {
       </main>
 
       {selectedFamily && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
-            onClick={() => setSelectedFamily(null)}
-          ></div>
-          
-          <div className="relative glass w-full max-w-6xl max-h-[90vh] rounded-[2rem] overflow-hidden flex flex-col shadow-2xl">
-            <div className="p-8 pb-4 flex justify-between items-start border-b border-white/5">
-              <div>
-                <div className="flex items-center space-x-3 mb-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded-md">
-                    {selectedFamily.brand_name}
-                  </span>
-                  <div className="flex items-center text-slate-500 text-[10px] font-bold">
-                    <Zap className="h-3 w-3 mr-1" />
-                    {selectedFamily.variants.length} Variants Tracked
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-slate-950/60 backdrop-blur-md animate-fade-in">
+          <div className="glass w-full max-w-6xl max-h-[90vh] rounded-[2.5rem] overflow-hidden flex flex-col shadow-2xl">
+            <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar">
+              <div className="flex justify-between items-start mb-8">
+                <div className="flex items-center space-x-6">
+                  <ProductImage brand={selectedFamily.brand_name} image_url={selectedFamily.image_url} className="h-20 w-20 text-2xl hidden md:flex" />
+                  <div>
+                    <div className="flex items-center space-x-2 text-xs font-bold text-theme-secondary uppercase tracking-[0.2em] mb-2">
+                      <span>{selectedFamily.brand_name}</span>
+                      <span className="h-1 w-1 rounded-full bg-theme-border" />
+                      <span>{selectedFamily.category}</span>
+                    </div>
+                    <h2 className="text-3xl font-black text-theme-primary uppercase tracking-tight">{selectedFamily.name}</h2>
                   </div>
                 </div>
-                <h2 className="text-3xl font-black text-white">{selectedFamily.name}</h2>
+                <button 
+                  onClick={() => { setSelectedFamily(null); setSelectedVariantId(null); }}
+                  className="p-3 bg-theme-base/5 hover:bg-theme-base/10 rounded-2xl text-theme-secondary hover:text-theme-primary transition-all border border-theme-border"
+                >
+                  <RefreshCw className="h-5 w-5 rotate-45" />
+                </button>
               </div>
-              <button 
-                onClick={() => setSelectedFamily(null)}
-                className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"
-              >
-                <RefreshCw className="h-6 w-6 transform rotate-45" />
-              </button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-8 pt-4">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-                <div className="lg:col-span-7">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-6 flex items-center">
-                    <Package className="h-4 w-4 mr-2" />
-                    Market Comparison
-                  </h4>
-                  
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-12 gap-4 px-4 text-[10px] font-black uppercase tracking-widest text-slate-600">
-                      <div className="col-span-3">SPEC</div>
-                      <div className="col-span-4 text-center">NEW CONDITION</div>
-                      <div className="col-span-5 text-center">USED / REFURBISHED</div>
-                    </div>
-
-                    {groupVariantsByStorage(selectedFamily.variants).map(([storage, types]) => (
-                      <div key={storage} className="grid grid-cols-12 gap-4 bg-white/5 rounded-2xl p-4 border border-white/5 items-center">
-                        <div className="col-span-3 font-bold text-indigo-400">{storage}</div>
-                        
-                        <div className="col-span-4">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                <div className="xl:col-span-7 space-y-8">
+                  {groupVariantsByStorage(selectedFamily.variants).map(([storage, types]) => (
+                    <div key={storage} className="animate-fade-in">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="bg-theme-base/5 px-3 py-1 rounded-full text-[10px] font-black text-theme-secondary uppercase tracking-widest border border-theme-border">
+                          {storage}
+                        </div>
+                        <div className="flex-1 h-px bg-theme-border" />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                          <div className="flex items-center space-x-2 text-[9px] font-black text-theme-secondary uppercase tracking-widest pl-1">
+                            <Zap className="h-3 w-3 text-theme-accent" />
+                            <span>Brand New</span>
+                          </div>
                           <VariantBox variants={types.new} type="new" />
                         </div>
-
-                        <div className="col-span-5">
+                        <div className="space-y-3">
+                          <div className="flex items-center space-x-2 text-[9px] font-black text-theme-secondary uppercase tracking-widest pl-1">
+                            <ShieldCheck className="h-3 w-3 text-success" />
+                            <span>Verified Used</span>
+                          </div>
                           <VariantBox variants={types.used} type="used" />
                         </div>
                       </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-8 bg-slate-900/50 rounded-2xl p-6 border border-white/5">
-                    <div className="flex items-center space-x-2 mb-4 text-emerald-400">
-                      <ShieldCheck className="h-5 w-5" />
-                      <span className="text-xs font-bold uppercase tracking-tight">Trust & Verification</span>
                     </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Prices are updated automatically via retailers. Used device pricing reflects Grade A/B conditions unless specified. Always verify the source URL before purchase.
-                    </p>
-                  </div>
+                  ))}
                 </div>
 
-                <div className="lg:col-span-5">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-6 flex items-center">
-                    <TrendingUp className="h-4 w-4 mr-2" />
-                    Price Trend
-                  </h4>
-
-                  <div className="bg-slate-900/50 rounded-[2rem] p-6 border border-white/5 h-[400px]">
-                    {historyLoading ? (
-                      <div className="flex flex-col justify-center items-center h-full">
-                        <RefreshCw className="h-8 w-8 animate-spin text-indigo-500 mb-4" />
-                        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Analyzing History...</span>
+                <div className="xl:col-span-5 space-y-6">
+                  <div className="glass rounded-3xl p-6 border-theme-border">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center space-x-2">
+                        <TrendingUp className="h-4 w-4 text-theme-accent" />
+                        <h3 className="text-xs font-black text-theme-primary uppercase tracking-widest">Market History</h3>
                       </div>
-                    ) : history.length > 1 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={history}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff05" />
-                          <XAxis 
-                            dataKey="scraped_at" 
-                            tickFormatter={formatDate}
-                            tick={{ fontSize: 9, fill: '#64748b' }}
-                            axisLine={false}
-                            tickLine={false}
-                          />
-                          <YAxis 
-                            tickFormatter={(value) => `$${value}`}
-                            tick={{ fontSize: 9, fill: '#64748b' }}
-                            axisLine={false}
-                            tickLine={false}
-                          />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: '#1e293b', 
-                              border: 'none', 
-                              borderRadius: '12px',
-                              fontSize: '10px',
-                              color: '#fff'
-                            }}
-                            itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
-                            formatter={(value: any) => [`$${Number(value).toLocaleString()}`, 'Price']}
-                            labelFormatter={(label: any) => `Scraped: ${new Date(label).toLocaleString()}`}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="price" 
-                            stroke="#6366f1" 
-                            strokeWidth={3}
-                            dot={{ r: 0 }}
-                            activeDot={{ r: 6, fill: '#6366f1', stroke: '#fff', strokeWidth: 2 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex flex-col justify-center items-center h-full text-center">
-                        <div className="bg-slate-800 p-4 rounded-full mb-4">
-                          <TrendingUp className="h-8 w-8 text-slate-600" />
+                      <div className="flex items-center space-x-1 text-[10px] font-bold text-theme-secondary bg-theme-base/5 px-2 py-1 rounded-lg">
+                        <Info className="h-3 w-3" />
+                        <span>Last 30 Days</span>
+                      </div>
+                    </div>
+                    
+                    <div className="h-[250px] w-full">
+                      {historyLoading ? (
+                        <div className="h-full flex flex-col items-center justify-center">
+                          <RefreshCw className="h-6 w-6 text-theme-secondary animate-spin mb-2" />
+                          <span className="text-[10px] text-theme-secondary font-bold uppercase">Loading...</span>
                         </div>
-                        <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Insufficient Price Data</p>
-                        <p className="text-[10px] text-slate-600 mt-2 max-w-[200px]">We need at least two data points to generate a trend chart.</p>
-                      </div>
-                    )}
+                      ) : history.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={history}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                            <XAxis 
+                              dataKey="scraped_at" 
+                              tickFormatter={formatDate}
+                              tick={{fill: theme === 'dark' ? '#475569' : '#94a3b8', fontSize: 10, fontWeight: 700}}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis 
+                              hide 
+                              domain={['dataMin - 50', 'dataMax + 50']}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: theme === 'dark' ? '#0f172a' : '#fff', 
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '12px',
+                                fontSize: '12px',
+                                fontWeight: 800,
+                                color: 'var(--text-primary)'
+                              }}
+                              itemStyle={{ color: 'var(--accent)' }}
+                              labelFormatter={(label: any) => formatDate(label as string)}
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="price" 
+                              stroke="var(--accent)" 
+                              strokeWidth={3} 
+                              dot={{r: 4, fill: 'var(--accent)', strokeWidth: 2, stroke: 'var(--bg-primary)'}}
+                              activeDot={{r: 6, strokeWidth: 0}}
+                              animationDuration={1000}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex flex-col items-center justify-center bg-theme-base/20 rounded-2xl border border-dashed border-theme-border">
+                          <TrendingUp className="h-8 w-8 text-theme-secondary opacity-30 mb-2" />
+                          <span className="text-[10px] text-theme-secondary font-black uppercase">No Data Patterns Yet</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="mt-6 flex justify-between items-center text-[10px] font-bold">
-                    <div className="flex items-center text-slate-500">
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                      AUTO-REFRESH ACTIVE
-                    </div>
-                    <div className="text-indigo-400">
-                      LIVE MARKET DATA
-                    </div>
+                  <div className="bg-theme-accent rounded-3xl p-6 text-white shadow-xl shadow-theme-accent/20 relative overflow-hidden group">
+                    <Package className="absolute -right-4 -bottom-4 h-32 w-32 text-white/10 -rotate-12 group-hover:rotate-0 transition-transform duration-500" />
+                    <h4 className="text-sm font-black uppercase tracking-widest mb-2">Deal Prediction</h4>
+                    <p className="text-xs text-white/80 font-medium leading-relaxed mb-4 relative z-10">
+                      Based on current retail trends, prices for this model are stable. We recommend buying now if you find a deal under the market average.
+                    </p>
+                    <button className="bg-white text-theme-accent px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tight hover:bg-white/90 transition-colors relative z-10">
+                      Get Price Alerts
+                    </button>
                   </div>
                 </div>
               </div>

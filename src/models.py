@@ -12,4 +12,5 @@ class ProductVariantInput(BaseModel):
     price: float
     currency: str = "SGD"
     url: str
+    image_url: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)

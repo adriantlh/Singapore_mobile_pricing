@@ -12,8 +12,9 @@ class RedWhiteMobileAdapter(BaseAdapter):
     """
 
     async def scrape(self) -> str:
+        proxy = self.get_proxy()
         try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0, proxy=proxy) as client:
                 response = await client.get(self.base_url)
                 response.raise_for_status()
                 return response.text
@@ -73,13 +74,20 @@ class RedWhiteMobileAdapter(BaseAdapter):
                 if badge:
                     promo = badge.get_text(strip=True)
 
+                # 5. Extract Image URL
+                image_url = ""
+                img_tag = container.find('img')
+                if img_tag:
+                    image_url = img_tag.get('src', '')
+
                 products.append({
                     "brand": brand,
                     "model": model,
                     "url": product_url,
                     "price": price_val,
                     "currency": "SGD",
-                    "promo": promo
+                    "promo": promo,
+                    "image_url": image_url
                 })
             except Exception as e:
                 print(f"[{self.source_name}] Error parsing product: {e}")
@@ -112,5 +120,6 @@ class RedWhiteMobileAdapter(BaseAdapter):
             price=raw_data['price'],
             currency=raw_data['currency'],
             url=raw_data['url'],
+            image_url=raw_data.get('image_url'),
             metadata={"promo": raw_data['promo']}
         )

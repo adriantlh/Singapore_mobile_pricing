@@ -19,6 +19,8 @@ class Normalizer:
         "Z Fold 7": "2025-08-11", "Z Flip 7": "2025-08-11",
         "Z Fold 6": "2024-07-24", "Z Flip 6": "2024-07-24",
         "Z Fold 5": "2023-08-11", "Z Flip 5": "2023-08-11",
+        "A57": "2025-03-15", "A56": "2024-03-15", "A37": "2025-03-15", "A36": "2024-03-15",
+        "A26": "2024-12-15", "A17": "2024-12-15", "A07": "2024-12-15",
         # Google
         "Pixel 10": "2025-08-13", "Pixel 9": "2024-08-13", "Pixel 8": "2023-10-12", "Pixel 7": "2022-10-13"
     }
@@ -65,6 +67,17 @@ class Normalizer:
         return "Unknown"
 
     def normalize(self, raw_title: str) -> Dict:
+        # Reload families to ensure real-time matching during ingestion
+        family_rows = self.db.execute("""
+            SELECT pf.id, pf.name, pf.brand_id, pf.category, pf.released_at 
+            FROM product_families pf
+            JOIN brands b ON pf.brand_id = b.id
+        """, fetch=True)
+        self.families = [{
+            "id": row['id'], "name": row['name'], "brand_id": row['brand_id'],
+            "category": row['category'], "released_at": row['released_at']
+        } for row in family_rows]
+
         # 0. Pre-clean
         raw_title = re.sub(r'^(new|used|refurbished)\s+', '', raw_title, flags=re.IGNORECASE).strip()
         
@@ -88,6 +101,7 @@ class Normalizer:
         storage = self._extract_storage(raw_title)
         ram = self._extract_ram(raw_title)
         color = self._extract_color(raw_title)
+        promo = self._extract_promotion(raw_title)
         
         nuance = None
         if "noise cancellation" in raw_title.lower() or "anc" in raw_title.lower():
@@ -97,56 +111,71 @@ class Normalizer:
         # Clean title of technical junk
         if storage: clean_title = re.sub(rf'(?i)\b{re.escape(storage)}\b', '', clean_title).strip()
         if ram: clean_title = re.sub(rf'(?i)\b{re.escape(ram)}(gb|g)?\b', '', clean_title).strip()
-        clean_title = re.sub(r'\b\d+/\d+\b', '', clean_title).strip()
-        clean_title = re.sub(r'\s+[\d/]+$', '', clean_title).strip()
+        
+        # AGGRESSIVE spec stripping
+        clean_title = re.sub(r'\b\d+/\d+\b', '', clean_title).strip() # 12/256
+        clean_title = re.sub(r'(?i)\([^)]*(gb|tb|ram|\d|/)[^)]*\)', '', clean_title).strip()
+        clean_title = re.sub(r'\(\s*\)', '', clean_title).strip()
+        clean_title = re.sub(r'[\d/\s\(\)-]+$', '', clean_title).strip()
             
         if color:
             color_pattern = re.escape(color).replace(r'\ ', r'\s+')
             clean_title = re.sub(rf'(?i)\b{color_pattern}\b', '', clean_title).strip()
         
-        keywords = ["used", "refurbished", "new", "5g", "4g", "lte", "wifi", "cellular", "gps", "singapore", "export", "telco", "set", "activated", "with", "and", "remote", "mic", "gb", "tb", "ram"]
+        keywords = [
+            "used", "refurbished", "new", "5g", "4g", "lte", "wifi", "cellular", "gps",
+            "singapore", "export", "telco", "set", "activated",
+            "with", "and", "remote", "mic", "gb", "tb", "ram"
+        ]
         for word in keywords:
             clean_title = re.sub(rf'(?i)\b{re.escape(word)}\b', '', clean_title).strip()
+        
+        # Strip redundant sub-brands from match string
+        for sb in ["galaxy", "pixel"]:
+            clean_title = re.sub(rf'(?i)\b{re.escape(sb)}\b', '', clean_title).strip()
         
         clean_title = re.sub(r'\s+', ' ', clean_title).strip()
         clean_title = re.sub(r'^[^\w\(]+|[^\w\)]+$', '', clean_title).strip()
 
         # 3. Match Family
         search_space = [f for f in self.families if f["brand_id"] == detected_brand_id]
-        family_names = [f["name"] for f in search_space]
         best_match = None
         highest_score = 0
-        raw_nums = set(re.findall(r'\b\d+\b', raw_title))
 
         for f in search_space:
             f_name = f["name"].lower()
-            f_nums = set(re.findall(r'\b\d+\b', f["name"]))
-            if raw_nums - f_nums: continue
-            if f_name in raw_title.lower():
-                score = fuzz.token_sort_ratio(f_name, clean_title) + 50
+            f_clean = f_name.replace(brand_canonical_name.lower(), "").strip()
+            if not f_clean: continue
+            
+            if re.search(rf'(?i)\b{re.escape(f_clean)}\b', raw_title):
+                # EXCLUSIVE MODIFIER CHECK
+                modifiers = ["ultra", "plus", "max", "pro", "fe", "mini", "air", "se", "fold", "flip", "e", "a", "xl"]
+                f_mods = {m for m in modifiers if re.search(rf'(?i)\b{m}\b|\d+{m}\b', f_name)}
+                raw_mods = {m for m in modifiers if re.search(rf'(?i)\b{m}\b|\d+{m}\b', raw_title)}
+                
+                if f_mods != raw_mods: continue
+
+                score = fuzz.token_sort_ratio(f_clean, clean_title) + 50
                 if score > highest_score:
                     highest_score = score
                     best_match = f
 
-        if highest_score < 90:
-            match = process.extractOne(clean_title, family_names, scorer=fuzz.token_set_ratio)
+        if highest_score < 110:
+            match = process.extractOne(clean_title, [f["name"].replace(brand_canonical_name, "").strip() for f in search_space], scorer=fuzz.token_set_ratio)
             if match:
                 matched_f = search_space[match[2]]
-                matched_nums = set(re.findall(r'\b\d+\b', matched_f["name"]))
-                if not (raw_nums - matched_nums) and match[1] > highest_score:
+                modifiers = ["ultra", "plus", "max", "pro", "fe", "mini", "air", "se", "fold", "flip", "e", "a", "xl"]
+                f_mods = {m for m in modifiers if re.search(rf'(?i)\b{m}\b|\d+{m}\b', matched_f["name"])}
+                raw_mods = {m for m in modifiers if re.search(rf'(?i)\b{m}\b|\d+{m}\b', raw_title)}
+                
+                if f_mods == raw_mods and match[1] > highest_score:
                     highest_score = match[1]
                     best_match = matched_f
 
         # 4. Fallback
         is_new = highest_score < 80
-        suggested_name = clean_title.title()
-        noise = ["Deep", "Space", "Natural", "Blue", "Silver", "Gold", "Gray", "Grey", "Black", "White", "Titanium", "Cosmic", "Orange", "Desert", "Singapore", "Product", "Red", "Pink", "Yellow", "Purple", "Lavender", "Mist", "Sage", "Soft", "Cloud", "Light", "Sky"]
-        for _ in range(2):
-            for word in noise:
-                suggested_name = re.sub(rf'(?i)\s+{word}$', '', suggested_name).strip()
-                suggested_name = re.sub(rf'(?i)^{word}\s+', '', suggested_name).strip()
         
-        # Check for hardcoded release date if it's new
+        # Hardcoded release date
         inferred_release_date = None
         if is_new:
             for model_key, date in self.RELEASE_DATES.items():
@@ -157,31 +186,41 @@ class Normalizer:
         # Model Number Logic
         model_num = None
         if "apple" in brand_canonical_name.lower():
-            m = re.search(r'(?i)(iphone|watch|ipad|airpods)\s*(1[0-7]|[2-9]|se|pro|air)\b', raw_title)
-            if m: model_num = m.group(1).title() + " " + m.group(2).upper()
+            m = re.search(r'(?i)(iphone|watch|ipad|airpods)\s*(1[0-7]|se|[2-9])(\s?(pro\s?max|pro|plus|air|mini|ultra))?\b', raw_title)
+            if m:
+                model_num = m.group(1).title() + " " + m.group(2).upper()
+                if m.group(3): model_num += " " + m.group(3).strip().title()
+            if "watch" in raw_title.lower() and "series" in raw_title.lower():
+                ms = re.search(r'(?i)series\s*(\d+)', raw_title)
+                if ms: model_num = f"Watch Series {ms.group(1)}"
         elif "samsung" in brand_canonical_name.lower():
-            m = re.search(r'(?i)\b(s2[0-6]|z\s?(fold|flip)\s?[1-7]|tab\s?s[1-9]|a\d{2})\b', raw_title)
-            if m: model_num = m.group(1).upper()
-        
-        if model_num:
-            cat_words = ["Iphone", "Watch", "Ipad", "Airpods", "Fold", "Flip", "Tab"]
-            merged = False
-            for cat in cat_words:
-                if cat.lower() in suggested_name.lower() and cat.lower() in model_num.lower():
-                    mods = [m for m in ["Plus", "Max", "Pro", "Fe", "Ultra", "Mini"] if m.lower() in suggested_name.lower() and m.lower() not in model_num.lower()]
-                    suggested_name = model_num
-                    if mods: suggested_name += " " + " ".join(mods)
-                    merged = True
-                    break
-            if not merged and model_num.lower() not in suggested_name.lower():
-                suggested_name = f"{suggested_name} {model_num}"
+            # Match S21-26 with Ultra/Plus, Z Fold/Flip (with digit), Tab S, and A series
+            m = re.search(r'(?i)\b(s2[0-6]|z\s?(fold|flip)\s?[1-7]?|tab\s?s[1-9]|a\d{2})\s*(ultra|plus|fe)?\b', raw_title)
+            if m:
+                model_num = m.group(1).upper()
+                if m.group(3):
+                    model_num += " " + m.group(3).strip().upper()
 
-        suggested_name = re.sub(r'\s+', ' ', suggested_name).strip()
+        elif "google" in brand_canonical_name.lower():
+            m = re.search(r'(?i)\b(pixel)\s*(\d+[a-z]?(\s?(pro\s?fold|pro\s?xl|pro|xl|fold))?)\b', raw_title)
+            if m: model_num = "Pixel " + m.group(2).upper()
+
+        if model_num:
+            suggested_name = model_num
+        else:
+            suggested_name = clean_title.title()
+            noise = ["Deep", "Space", "Natural", "Blue", "Silver", "Gold", "Gray", "Grey", "Black", "White", "Titanium", "Cosmic", "Orange", "Desert", "Singapore", "Product", "Red", "Pink", "Yellow", "Purple", "Lavender", "Mist", "Sage", "Soft", "Cloud", "Light", "Sky"]
+            for _ in range(2):
+                for word in noise:
+                    suggested_name = re.sub(rf'(?i)\s+{word}$', '', suggested_name).strip()
+                    suggested_name = re.sub(rf'(?i)^{word}\s+', '', suggested_name).strip()
+
         if nuance and nuance.lower() not in suggested_name.lower():
             suggested_name = f"{suggested_name} {nuance}"
         
+        suggested_name = re.sub(rf'(?i)\b{re.escape(brand_canonical_name)}\b', '', suggested_name).strip()
         final_suggested_name = f"{brand_canonical_name} {suggested_name}"
-        final_suggested_name = re.sub(rf'(?i)\b{brand_canonical_name}\b\s+\b{brand_canonical_name}\b', brand_canonical_name, final_suggested_name)
+        final_suggested_name = re.sub(r'\s+', ' ', final_suggested_name).strip()
 
         inferred_category = "phone"
         title_lower = raw_title.lower()
@@ -199,7 +238,7 @@ class Normalizer:
             "category": best_match["category"] if best_match and not is_new else inferred_category,
             "released_at": best_match["released_at"] if best_match and not is_new else inferred_release_date,
             "confidence": highest_score, "is_new": is_new,
-            "attributes": {"storage": storage, "ram": ram, "color": color, "nuance": nuance, "raw_title": raw_title}
+            "attributes": {"storage": storage, "ram": ram, "color": color, "nuance": nuance, "promo": promo, "raw_title": raw_title}
         }
 
     def _extract_storage(self, text: str) -> Optional[str]:
@@ -218,4 +257,11 @@ class Normalizer:
         colors = ["Black", "White", "Silver", "Gold", "Gray", "Grey", "Space-Black", "Space-Grey", "Titanium", "Natural", "Blue", "Deep-Blue", "Sierra-Blue", "Green", "Alpine-Green", "Red", "Pink", "Yellow", "Purple", "Deep-Purple", "Orange", "Cosmic-Orange", "Midnight", "Starlight", "Graphite", "Space-Black", "Space-Gray", "Space-Grey", "Natural Titanium", "Blue Titanium", "White Titanium", "Black Titanium", "Desert Titanium", "Teal", "Berry", "Ultramarine"]
         for c in colors:
             if re.search(rf'(?i)\b{re.escape(c)}\b', text): return c.replace("-", " ").title()
+        return None
+
+    def _extract_promotion(self, text: str) -> Optional[str]:
+        promos = [r'free\s+[\w\s]+', r'with\s+gift', r'w\s?/\s?gift', r'warranty', r'voucher', r'discount', r'promo', r'bundle']
+        for p in promos:
+            match = re.search(rf'(?i){p}', text)
+            if match: return match.group(0).strip().title()
         return None

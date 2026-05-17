@@ -29,15 +29,16 @@ class Ingestor:
 
         # 3. Upsert Family
         family_query = """
-            INSERT INTO product_families (brand_id, name, slug, category, released_at)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO product_families (brand_id, name, slug, category, released_at, image_url)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (slug) DO UPDATE SET 
                 name = EXCLUDED.name,
                 category = EXCLUDED.category,
-                released_at = COALESCE(EXCLUDED.released_at, product_families.released_at)
+                released_at = COALESCE(EXCLUDED.released_at, product_families.released_at),
+                image_url = COALESCE(EXCLUDED.image_url, product_families.image_url)
             RETURNING id;
         """
-        family_res = self.db.execute(family_query, (brand_id, data.family_name, data.family_slug, category, released_at), fetch=True)
+        family_res = self.db.execute(family_query, (brand_id, data.family_name, data.family_slug, category, released_at, data.image_url), fetch=True)
         if not family_res:
             raise Exception("Failed to upsert family")
         family_id = family_res[0]['id']
@@ -76,6 +77,27 @@ class Ingestor:
         source_id = source_res[0]['id']
 
         # 5. Log Price
+        # Detect significant price drops
+        last_price_query = """
+            SELECT price FROM price_logs 
+            WHERE variant_id = %s AND source_id = %s
+            ORDER BY scraped_at DESC LIMIT 1;
+        """
+        last_price_res = self.db.execute(last_price_query, (variant_id, source_id), fetch=True)
+        
+        if last_price_res:
+            old_price = float(last_price_res[0]['price'])
+            if data.price < old_price:
+                drop_pct = ((old_price - data.price) / old_price) * 100
+                if drop_pct >= 5.0:
+                    # Log triggered alert
+                    alert_query = """
+                        INSERT INTO triggered_alerts (variant_id, price_before, price_after, percentage_drop)
+                        VALUES (%s, %s, %s, %s);
+                    """
+                    self.db.execute(alert_query, (variant_id, old_price, data.price, drop_pct))
+                    print(f"!!! ALERT: Price drop detected for {data.variant_name}: {old_price} -> {data.price} (-{drop_pct:.1f}%)")
+
         price_log_query = """
             INSERT INTO price_logs (variant_id, source_id, price, currency, url, metadata)
             VALUES (%s, %s, %s, %s, %s, %s);

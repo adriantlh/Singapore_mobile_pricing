@@ -15,8 +15,9 @@ class MobileStopAdapter(BaseAdapter):
         self.json_url = f"{base_url.rstrip('/')}/products.json?limit=250"
 
     async def scrape(self) -> str:
+        proxy = self.get_proxy()
         try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0, proxy=proxy) as client:
                 headers = {
                     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept": "application/json"
@@ -63,6 +64,12 @@ class MobileStopAdapter(BaseAdapter):
             if any(x in title.lower() for x in ["case", "screen protector", "cable", "charger", "adapter", "strap", "band"]):
                 continue
 
+            # Extract Image URL from Shopify images array
+            image_url = ""
+            images = p.get("images", [])
+            if images:
+                image_url = images[0].get("src", "")
+
             for variant in p.get("variants", []):
                 price = float(variant.get("price", 0))
                 if price == 0:
@@ -78,6 +85,7 @@ class MobileStopAdapter(BaseAdapter):
                     "full_name": full_name,
                     "price": price,
                     "url": f"{self.base_url}/products/{handle}",
+                    "image_url": image_url,
                     "vendor": vendor,
                     "product_type": p.get("product_type"),
                     "options": variant.get("option1"), # Shopify often puts storage/color in option1, 2, 3
@@ -126,5 +134,6 @@ class MobileStopAdapter(BaseAdapter):
             price=raw_data['price'],
             currency="SGD",
             url=raw_data['url'],
+            image_url=raw_data.get('image_url'),
             metadata={}
         )

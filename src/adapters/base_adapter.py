@@ -1,5 +1,7 @@
 import abc
-from typing import Any, Dict, List
+import os
+import random
+from typing import Any, Dict, List, Optional
 from src.models import ProductVariantInput
 
 class BaseAdapter(abc.ABC):
@@ -10,6 +12,18 @@ class BaseAdapter(abc.ABC):
     def __init__(self, source_name: str, base_url: str):
         self.source_name = source_name
         self.base_url = base_url
+
+    def get_proxy(self) -> Optional[str]:
+        """
+        Returns a random proxy from the PROXY_POOL env var.
+        Expected format: http://user:pass@host:port,http://...
+        """
+        pool_str = os.getenv("PROXY_POOL")
+        if pool_str:
+            pool = [p.strip() for p in pool_str.split(",") if p.strip()]
+            if pool:
+                return random.choice(pool)
+        return None
 
     @abc.abstractmethod
     async def scrape(self) -> str:

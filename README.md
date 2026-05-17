@@ -7,11 +7,12 @@ A pricing aggregator designed to track and monitor mobile phone prices across va
 This system automatically scrapes pricing information from multiple sources, normalizes the data, and stores it in a central database to provide historical price tracking and deal discovery.
 
 ### Key Features
-- **Adapter-Based Scraping**: Modular scrapers for different site structures (Static, Dynamic, and Site-specific).
-- **Price Comparison**: Aggregates and compares prices for the exact same model across multiple retailers side-by-side.
-- **Precision Normalization**: Intelligently strips noise while ensuring model numbers and specs (Storage, RAM, Color) are preserved for accurate grouping.
+- **Modern UI/UX**: Consumer-friendly 'E-commerce Standard' dashboard with sticky filters, horizontal 'Top Deals' highlights, and interactive brand placeholders.
+- **Side-by-Side Comparison**: View and compare live prices from 4 major Singaporean retailers simultaneously.
+- **Proactive Deal Alerts**: Automatic detection of significant price drops (≥5%) with daily email notifications.
+- **Precision Normalization**: Intelligently strips noise while ensuring flagship model numbers and mid-range variants (Samsung A-series, Pixel Pro XL) are perfectly preserved.
+- **Autonomous Scraping**: Fully automated pipeline running every 12 hours with Redis/Celery orchestration.
 - **Price History**: Tracks price changes over time to identify trends and best deals.
-- **Responsive Dashboard**: A modern React-based frontend to visualize current prices and historical data.
 
 ## 🛠 Tech Stack
 
@@ -73,21 +74,16 @@ This system automatically scrapes pricing information from multiple sources, nor
 
 ### Completed
 - [x] **Database Schema**: Full support for brands, families, variants, and time-series price logs.
-- [x] **Intelligence Engine**: Robust `Normalizer` for fuzzy matching and precision generational naming.
+- [x] **Intelligence Engine**: Robust `Normalizer` for fuzzy matching, generational naming, and promotion extraction.
+- [x] **Autonomous Pipeline**: 12-hour automated scraping and deal processing via Redis/Celery.
+- [x] **Proactive Alerting**: System logs significant price drops and sends daily deal summaries via Email.
 - [x] **Cross-Source Overlap**: Accurate grouping of identical models across different retailers.
-- [x] **Big 3 Focus**: Optimized tracking for **Apple, Samsung, and Google** devices.
-- [x] **API & Frontend**: Functional dashboard with side-by-side multi-source price comparison and purchase links.
-- [x] **Tracked Retailers**: 
-    - **RedWhite Mobile** (Static / New & Used)
-    - **Mister Mobile** (Deep Variation Scrape / New & Used)
-    - **WhyMobile** (Static / Brand-Specific & Used)
-    - **MobileStop** (Shopify JSON / Accessories & Variants)
+- [x] **E-commerce Dashboard**: Modern React UI with Top Deals carousel, sticky filters, and direct purchase links.
+- [x] **Tracked Retailers**: RedWhite Mobile, Mister Mobile, WhyMobile, MobileStop.
 
 ### In Progress / Planned
-- [ ] **Orchestrator**: Automated scheduling of scraping jobs via Celery/Redis.
-- [ ] **Alerting**: Notification system for price drops.
-- [ ] **Dynamic Scrapers**: Playwright support for high-protection sites.
-- [ ] **Proxy Rotation**: Enhanced resilience against bot detection.
+- [ ] **Dynamic Scrapers**: Playwright support for high-protection sites (Lazada/Shopee).
+- [ ] **Advanced Predictions**: Use history data to predict future price trends.
 
 ## 🧪 Testing
 Run test scripts to verify adapters or database connectivity:

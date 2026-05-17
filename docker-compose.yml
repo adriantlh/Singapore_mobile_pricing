@@ -8,8 +8,6 @@ services:
       POSTGRES_DB: mobile_pricing
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
@@ -21,10 +19,40 @@ services:
     restart: always
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/mobile_pricing
-    ports:
-      - "8000:8000"
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - db
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: celery -A src.orchestrator worker --loglevel=info
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/mobile_pricing
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: celery -A src.orchestrator beat --loglevel=info
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/mobile_pricing
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    restart: always
 
   frontend:
     build:

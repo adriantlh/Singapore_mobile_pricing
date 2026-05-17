@@ -11,8 +11,9 @@ class WhyMobileAdapter(BaseAdapter):
     """
 
     async def scrape(self) -> str:
+        proxy = self.get_proxy()
         try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15.0, proxy=proxy) as client:
                 headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
                 }
@@ -89,6 +90,16 @@ class WhyMobileAdapter(BaseAdapter):
                     if promo_elem:
                         promo = promo_elem.get_text(strip=True)
 
+                # 6. Image URL
+                image_url = ""
+                media_top = container.find('div', class_='uk-card-media-top')
+                if media_top:
+                    img = media_top.find('img')
+                    if img and img.get('src'):
+                        image_url = img.get('src')
+                        if not image_url.startswith('http'):
+                            image_url = "https://www.whymobile.com" + image_url
+
                 products.append({
                     "brand": "Unknown", 
                     "model": model,
@@ -97,7 +108,8 @@ class WhyMobileAdapter(BaseAdapter):
                     "currency": "SGD",
                     "condition": condition,
                     "category": category,
-                    "promo": promo
+                    "promo": promo,
+                    "image_url": image_url
                 })
             except Exception:
                 continue
@@ -133,5 +145,6 @@ class WhyMobileAdapter(BaseAdapter):
             price=raw_data['price'],
             currency="SGD",
             url=raw_data['url'],
+            image_url=raw_data.get('image_url'),
             metadata={"promo": raw_data['promo']}
         )

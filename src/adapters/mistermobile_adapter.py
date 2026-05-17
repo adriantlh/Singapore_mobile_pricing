@@ -86,6 +86,14 @@ class MisterMobileAdapter(BaseAdapter):
                 if len(links) >= 2:
                     brand = links[-1].get_text(strip=True)
 
+            # Extract Image URL
+            image_url = ""
+            gallery = soup.find('div', class_='woocommerce-product-gallery')
+            if gallery:
+                img = gallery.find('img')
+                if img:
+                    image_url = img.get('src', '')
+
             variations_data = []
             if match:
                 # Decode JSON from the data attribute
@@ -99,6 +107,7 @@ class MisterMobileAdapter(BaseAdapter):
                             "base_title": base_title,
                             "brand": brand,
                             "url": url,
+                            "image_url": image_url,
                             "price": float(v['display_price']),
                             "attributes": v['attributes'],
                             "variation_id": v['variation_id'],
@@ -117,6 +126,7 @@ class MisterMobileAdapter(BaseAdapter):
                             "base_title": base_title,
                             "brand": brand,
                             "url": url,
+                            "image_url": image_url,
                             "price": float(prices[-1]),
                             "attributes": {},
                             "variation_id": None,
@@ -169,5 +179,6 @@ class MisterMobileAdapter(BaseAdapter):
             price=raw_data['price'],
             currency="SGD",
             url=raw_data['url'],
+            image_url=raw_data.get('image_url'),
             metadata={"is_in_stock": raw_data['is_in_stock']}
         )

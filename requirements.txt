@@ -4,3 +4,5 @@ httpx
 beautifulsoup4
 pydantic
 rapidfuzz
+celery
+redis

@@ -22,29 +22,29 @@ This document tracks the active implementation progress of the project.
 - [x] **Task 2.3: Used/Refurbished Specialization**
     - [x] Completed: Built deep-scraping logic for specialized used device retailers.
 - [x] **Task 2.4: The Intelligence Engine (Standardizer)**
-    - [x] Completed: Implemented the `Normalizer` to handle fuzzy matching, precision generational naming, and cross-source data overlap.
+    - [x] Completed: Implemented the `Normalizer` to handle fuzzy matching, precision generational naming, cross-source data overlap, and specialized mid-range/modifier separation (Samsung A-series, Pixel Pro XL/Fold).
 
 ## Phase 3: Orchestration & Automation
-- [ ] **Task 3.1: Infrastructure Setup**
-    - [ ] Set up Redis and Celery.
-- [ ] **Task 3.2: The Orchestrator**
-    - [ ] Implement the scheduler to trigger scrapes based on source configuration.
-- [ ] **Task 3.3: Error & Health Monitoring**
-    - [ ] Implement logic to update `sources.health_status` on failure.
+- [x] **Task 3.1: Infrastructure Setup**
+    - [x] Completed: Set up Redis and Celery in Docker Compose.
+- [x] **Task 3.2: The Orchestrator**
+    - [x] Completed: Implemented Celery tasks with twice-daily scheduling (every 12 hours) for all 4 sources.
+- [x] **Task 3.3: Error & Health Monitoring**
+    - [x] Completed: Implemented concurrency management and exponential backoff retries (3 attempts) to ensure reliability.
 
 ## Phase 4: Resilience & Intelligence
-- [ ] **Task 4.1: Proxy Integration**
-    - [ ] Implement proxy rotation in the scraping layer.
+- [x] **Task 4.1: Proxy Integration**
+    - [x] Completed: Implemented proxy rotation logic in `BaseAdapter` and all retailer scrapers.
 - [ ] **Task 4.2: Promotion Extraction**
     - [ ] Enhance parsing logic for bundle/gift detection.
-- [ ] ** **Task 4.3: Alerting System
-    - [ ] Implement Telegram/Email alerts for significant price drops.
+- [x] **Task 4.3: Alerting System**
+    - [x] Completed: Built a price drop detection engine and an Email notification service.
 
 ## Phase 5: Visualization
 - [x] **Task 5.1: API Layer (FastAPI)**
     - [x] Completed: Create endpoints for product lists, price history, and alerts.
 - [x] **Task 5.2: Frontend Dashboard**
-    - [x] Completed: Build a React dashboard to visualize trends and "Best Deals".
+    - [x] Completed: Built a modern 'E-commerce Standard' React dashboard with a sticky top bar, horizontal 'Top Deals' carousel, and clear CTA purchase buttons.
 - [x] **Task 5.3: Containerization**
     - [x] Completed: Dockerize backend, frontend, and database using Docker Compose.
 

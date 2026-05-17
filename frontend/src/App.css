@@ -3,14 +3,35 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
+  /* DARK THEME (Default) */
+  --bg-primary: #020617;
+  --bg-secondary: #0f172a;
+  --bg-tertiary: #1e293b;
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
+  --border-color: rgba(255, 255, 255, 0.05);
   --accent: #6366f1;
   --accent-hover: #818cf8;
   --success: #10b981;
   --warning: #f59e0b;
+  --card-bg: rgba(15, 23, 42, 0.6);
+  --body-gradient: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #020617 100%);
+}
+
+[data-theme='light'] {
+  /* LIGHT THEME */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border-color: rgba(15, 23, 42, 0.08);
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --success: #059669;
+  --warning: #d97706;
+  --card-bg: rgba(255, 255, 255, 0.8);
+  --body-gradient: radial-gradient(circle at 50% 0%, #e0e7ff 0%, #f8fafc 100%);
 }
 
 body {
@@ -18,25 +39,48 @@ body {
   color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background-image: var(--body-gradient);
+  background-attachment: fixed;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .glass {
-  background: rgba(30, 41, 59, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--card-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
-.card-glow:hover {
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
-  border-color: rgba(99, 102, 241, 0.4);
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.price-tag {
-  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+.card-hover:hover {
+  transform: translateY(-4px);
+  background: var(--bg-tertiary);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04), 0 0 20px rgba(99, 102, 241, 0.1);
+}
+
+.deal-badge {
+  background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+}
+
+.cta-button {
+  background: linear-gradient(135deg, var(--accent) 0%, #4f46e5 100%);
+  transition: all 0.2s ease;
+}
+
+.cta-button:hover {
+  filter: brightness(1.1);
+  transform: scale(1.02);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  height: 4px;
+  width: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -48,6 +92,25 @@ body {
   border-radius: 10px;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+.custom-scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Image fallback styling */
+.img-placeholder {
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s ease;
 }
